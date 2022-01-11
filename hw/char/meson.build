@@ -39,3 +39,5 @@ specific_ss.add(when: 'CONFIG_VIRTIO', if_true: files('virtio-serial-bus.c'))
 specific_ss.add(when: 'CONFIG_PSERIES', if_true: files('spapr_vty.c'))
 
 specific_ss.add(when: 'CONFIG_GOLDFISH_TTY', if_true: files('goldfish_tty.c'))
+
+specific_ss.add(when: 'CONFIG_STM32F7_USART', if_true: files('stm32f7-usart.c'))

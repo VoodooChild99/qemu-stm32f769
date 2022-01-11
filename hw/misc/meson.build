@@ -126,3 +126,9 @@ specific_ss.add(when: 'CONFIG_MIPS_CPS', if_true: files('mips_cmgcr.c', 'mips_cp
 specific_ss.add(when: 'CONFIG_MIPS_ITU', if_true: files('mips_itu.c'))
 
 specific_ss.add(when: 'CONFIG_SBSA_REF', if_true: files('sbsa_ec.c'))
+
+specific_ss.add(when: 'CONFIG_STM32F7_RCC', if_true: files('stm32f7-rcc.c'))
+specific_ss.add(when: 'CONFIG_STM32F7_FLASH', if_true: files('stm32f7-flash.c'))
+specific_ss.add(when: 'CONFIG_STM32F7_PWR', if_true: files('stm32f7-pwr.c'))
+specific_ss.add(when: 'CONFIG_STM32F7_FMC', if_true: files('stm32f7-fmc.c'))
+specific_ss.add(when: 'CONFIG_STM32F7_RNG', if_true: files('stm32f7-rng.c'))

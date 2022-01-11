@@ -12,3 +12,6 @@ softmmu_ss.add(when: 'CONFIG_OMAP', if_true: files('omap_gpio.c'))
 softmmu_ss.add(when: 'CONFIG_RASPI', if_true: files('bcm2835_gpio.c'))
 softmmu_ss.add(when: 'CONFIG_ASPEED_SOC', if_true: files('aspeed_gpio.c'))
 softmmu_ss.add(when: 'CONFIG_SIFIVE_GPIO', if_true: files('sifive_gpio.c'))
+
+softmmu_ss.add(when: 'CONFIG_STM32F7_GPIOA', if_true: files('stm32f7-gpioa.c'))
+softmmu_ss.add(when: 'CONFIG_STM32F7_GPIOA', if_true: files('stm32f7-gpiod.c'))
