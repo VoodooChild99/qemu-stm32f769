@@ -171,4 +171,19 @@ config SIFIVE_U_PRCI
 config VIRT_CTRL
     bool
 
+config STM32F7_RCC
+    bool
+
+config STM32F7_FLASH
+    bool
+
+config STM32F7_PWR
+    bool
+
+config STM32F7_FMC
+    bool
+
+config STM32F7_RNG
+    bool
+
 source macio/Kconfig

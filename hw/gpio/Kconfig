@@ -13,3 +13,9 @@ config GPIO_PWR
 
 config SIFIVE_GPIO
     bool
+
+config STM32F7_GPIOA
+    bool
+
+config STM32F7_GPIOD
+    bool
