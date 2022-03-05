@@ -64,4 +64,6 @@ softmmu_ss.add(when: 'CONFIG_ROCKER', if_true: files(
 ), if_false: files('rocker/qmp-norocker.c'))
 softmmu_ss.add(when: 'CONFIG_ALL', if_true: files('rocker/qmp-norocker.c'))
 
+softmmu_ss.add(when: 'CONFIG_STM32F7_ETH', if_true: files('stm32f7-eth.c'))
+
 subdir('can')

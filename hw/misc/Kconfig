@@ -186,4 +186,7 @@ config STM32F7_FMC
 config STM32F7_RNG
     bool
 
+config STM32F7_SYSCFG
+    bool
+
 source macio/Kconfig

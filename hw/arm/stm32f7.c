@@ -36,6 +36,8 @@
 #include "hw/dma/stm32f7-dma.h"
 #include "hw/misc/stm32f7-fmc.h"
 #include "hw/misc/stm32f7-rng.h"
+#include "hw/net/stm32f7-eth.h"
+#include "hw/misc/stm32f7-syscfg.h"
 #include "hw/boards.h"
 #include "exec/address-spaces.h"
 #include "hw/misc/unimp.h"
@@ -249,6 +251,8 @@ static const STM32F769NIDISCOVERYDMAInfo stm32f769nidiscovery_dma_info[] = {
 #define STM32F769NIDISCOVERY_TIM3_BASE       0x40000400
 #define STM32F769NIDISCOVERY_FMC_BASE        0xA0000000
 #define STM32F769NIDISCOVERY_RNG_BASE        0x50060800
+#define STM32F769NIDISCOVERY_ETH_BASE        0x40028000
+#define STM32F769NIDISCOVERY_SYSCFG_BASE     0x40013800
 
 static void stm32f769nidiscovery_custome_periph_init(MachineState *machine) {
     STM32F7MachineState *sms = STM32F7_MACHINE(machine);
@@ -374,6 +378,24 @@ static void stm32f769nidiscovery_custome_periph_init(MachineState *machine) {
         qdev_get_gpio_in(DEVICE(&(sms->armv7m)), 80)
     );
     sysbus_mmio_map(SYS_BUS_DEVICE(rng), 0, STM32F769NIDISCOVERY_RNG_BASE);
+
+    /* ETH */
+    qemu_check_nic_model(&nd_table[0], "stm32f7");
+    DeviceState *eth = qdev_new(TYPE_STM32F7_ETH);
+    qdev_set_nic_properties(eth, &nd_table[0]);
+    sysbus_realize(SYS_BUS_DEVICE(eth), &error_fatal);
+    sysbus_connect_irq(
+        SYS_BUS_DEVICE(eth),
+        0,
+        qdev_get_gpio_in(DEVICE(&(sms->armv7m)), 61)
+    );
+    sysbus_mmio_map(SYS_BUS_DEVICE(eth), 0, STM32F769NIDISCOVERY_ETH_BASE);
+
+    /* SYSCFG */
+    STM32F7SYSCFG *syscfg = g_new(STM32F7SYSCFG, 1);
+    object_initialize_child(OBJECT(sms), "SYSCFG", syscfg, TYPE_STM32F7_SYSCFG);
+    sysbus_realize(SYS_BUS_DEVICE(syscfg), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(syscfg), 0, STM32F769NIDISCOVERY_SYSCFG_BASE);
 }
 
 static void stm32f7_common_init(MachineState *machine) {
