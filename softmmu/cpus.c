@@ -608,9 +608,81 @@ void cpus_register_accel(const AccelOpsClass *ops)
     cpus_accel = ops;
 }
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#include "afl-system-fuzzing/afl.h"
+static void afl_qemu_on_pipe_notified(void *ctx) {
+    static int exited_cpus = 0;
+    MachineState *ms = MACHINE(qdev_get_machine());
+    CPUState *cpu;
+    uint8_t buf[4];
+
+    if(read(afl_qemuloop_pipe[0], buf, 4) != 4) {
+        perror("afl_qemu_on_pipe_notified");
+    }
+    exited_cpus += 1;
+
+    if (mttcg_enabled && ms->smp.cpus != exited_cpus) {
+        printf("[!] CPU %d/%d exits\n", exited_cpus, ms->smp.cpus);
+        fflush(stdout);
+        return;
+    }
+
+    // now all vCPUs have exited
+    // stop ticks
+    cpu_disable_ticks();
+    // clear the flag
+    afl_wants_cpu_to_stop = 0;
+
+    // CPU_FOREACH(cpu) {
+    //     qemu_thread_join(cpu->thread);
+    // }
+
+    if (!mttcg_enabled) {
+        // this is for the parent
+        tcg_ctx = restart_tcg_ctx[0];
+    }
+
+    afl_setup();
+    afl_forkserver();
+
+    // we are now in the child!
+    // enable cpu ticks if we are told
+    if (afl_enable_ticks) {
+        cpu_enable_ticks();
+    }
+    // we want to resume execution
+    afl_wants_to_resume_exec = 1;
+    // clear the cache
+    single_tcg_cpu_thread = NULL;
+    // then really create vCPU threads (using old context)
+    CPU_FOREACH(cpu) {
+        cpu->created = false;
+        g_assert(cpus_accel != NULL && cpus_accel->create_vcpu_thread != NULL);
+        cpus_accel->create_vcpu_thread(cpu);
+        while (!cpu->created) {
+            qemu_cond_wait(&qemu_cpu_cond, &qemu_global_mutex);
+        }
+    }
+    // then resume vCPUs
+    resume_all_vcpus();
+}
+#endif
+
 void qemu_init_vcpu(CPUState *cpu)
 {
     MachineState *ms = MACHINE(qdev_get_machine());
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    // init pipe
+    if (pipe(afl_qemuloop_pipe) == -1) {
+        perror("failed to create afl_qemuloop_pipe");
+        exit(1);
+    }
+    // init tcg buffer
+    if (!restart_tcg_ctx) {
+        restart_tcg_ctx = g_malloc0(sizeof(TCGContext*) * (ms->smp.cpus));
+    }
+    qemu_set_fd_handler(afl_qemuloop_pipe[0], afl_qemu_on_pipe_notified, NULL ,NULL);
+#endif
 
     cpu->nr_cores = ms->smp.cores;
     cpu->nr_threads =  ms->smp.threads;

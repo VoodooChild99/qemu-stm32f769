@@ -8779,9 +8779,26 @@ static bool trans_SVC(DisasContext *s, arg_SVC *a)
         (a->imm == semihost_imm)) {
         gen_exception_internal_insn(s, s->pc_curr, EXCP_SEMIHOST);
     } else {
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+        /* hypercall */
+        if (a->imm == 0xff) {
+            TCGv_i32 tmp, tmp2, tmp3;
+            tmp = load_reg(s, 0);
+            tmp2 = load_reg(s, 1);
+            tmp3 = load_reg(s, 2);
+            gen_helper_afl_hypercall(tmp, cpu_env, tmp, tmp2, tmp3);
+            store_reg(s, 0, tmp);
+            // tcg_temp_free_i32(tmp);
+            tcg_temp_free_i32(tmp2);
+            tcg_temp_free_i32(tmp3);
+        } else {
+#endif
         gen_set_pc_im(s, s->base.pc_next);
         s->svc_imm = a->imm;
         s->base.is_jmp = DISAS_SWI;
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+        }
+#endif
     }
     return true;
 }
@@ -9442,6 +9459,85 @@ static void arm_tr_init_disas_context(DisasContextBase *dcbase, CPUState *cs)
     cpu_M0 = tcg_temp_new_i64();
 }
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#include "afl-system-fuzzing/afl.h"
+#ifdef AFL_QEMU_BINARY_ONLY_INSTRUMENT
+
+#ifdef AFL_QEMU_INSTR_INLINE
+// This is tricky:
+// `__thread` should not be used here since some blocks are translated
+// inside the forkserver (i.e., in the main thread, to speed things up)，
+// while they'll be executed in vCPU thread.
+target_ulong afl_prev_loc = 0;
+#endif
+
+static void gen_afl_cov_before_block(target_ulong pc) {
+#ifdef AFL_QEMU_INSTR_INLINE    
+    TCGv_ptr prev_loc_ptr, map_ptr, afl_started_ptr;
+    TCGv index, tmp;
+
+
+    TCGLabel *not_started_label = gen_new_label();
+
+    afl_started_ptr = tcg_const_local_ptr(&afl_start);
+    map_ptr = tcg_const_local_ptr(&afl_area_ptr);
+
+    index = tcg_temp_local_new();
+
+    tcg_gen_ld_tl(index, afl_started_ptr, 0);
+    tcg_gen_ld_ptr(map_ptr, map_ptr, 0);
+
+    tcg_gen_brcondi_tl(TCG_COND_NE, index, 1, not_started_label);
+    tcg_gen_brcondi_ptr(TCG_COND_EQ, map_ptr, 0, not_started_label);
+
+    /* aflStart == 1 && afl_area_ptr != NULL*/
+    prev_loc_ptr = tcg_const_local_ptr(&afl_prev_loc);
+    tmp = tcg_temp_local_new();
+    // h = cur_loc
+    tcg_gen_movi_tl(index, pc);
+    // h ^= curloc >> 16
+    tcg_gen_xori_tl(index, index, pc >> 16);
+    // h *= 0x85ebca6b
+    tcg_gen_muli_tl(index, index, 0x85ebca6b);
+    // h ^= h >> 13
+    tcg_gen_shri_tl(tmp, index, 13);
+    tcg_gen_xor_tl(index, index, tmp);
+    // h *= 0xc2b2ae35
+    tcg_gen_muli_tl(index, index, 0xc2b2ae35);
+    // h ^= h >> 16
+    tcg_gen_shri_tl(tmp, index, 16);
+    tcg_gen_xor_tl(index, index, tmp);
+    // h &= MAP_SIZE - 1
+    tcg_gen_andi_tl(index, index, afl_map_size - 1);
+    // afl_area_ptr[h ^ prev_loc]++
+    tcg_gen_ld_tl(tmp, prev_loc_ptr, 0);
+    tcg_gen_xor_tl(tmp, index, tmp);
+    tcg_gen_ext_i32_ptr(afl_started_ptr, tmp);
+    tcg_gen_add_ptr(map_ptr, map_ptr, afl_started_ptr);
+    tcg_gen_ld8u_tl(tmp, map_ptr, 0);
+    tcg_gen_addi_tl(tmp, tmp ,1);
+    tcg_gen_st8_tl(tmp, map_ptr, 0);
+    // prev_loc = h >> 1
+    tcg_gen_shri_tl(index, index, 1);
+    tcg_gen_st_tl(index, prev_loc_ptr, 0);
+
+    /* aflStart != 1 || afl_area_ptr == NULL*/
+    gen_set_label(not_started_label);
+
+    tcg_temp_free(index);
+    tcg_temp_free_ptr(afl_started_ptr);
+    tcg_temp_free_ptr(map_ptr);
+    tcg_temp_free(tmp);
+    tcg_temp_free_ptr(prev_loc_ptr);
+#else
+    TCGv_i32 tmp = tcg_const_i32(pc);
+    gen_helper_afl_trace(tmp);
+    tcg_temp_free_i32(tmp);
+#endif
+}
+#endif
+#endif
+
 static void arm_tr_tb_start(DisasContextBase *dcbase, CPUState *cpu)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
@@ -9481,6 +9577,12 @@ static void arm_tr_tb_start(DisasContextBase *dcbase, CPUState *cpu)
     if (dc->condexec_mask || dc->condexec_cond) {
         store_cpu_field_constant(0, condexec_bits);
     }
+
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#ifdef AFL_QEMU_BINARY_ONLY_INSTRUMENT
+    gen_afl_cov_before_block(dcbase->tb->pc);
+#endif
+#endif
 }
 
 static void arm_tr_insn_start(DisasContextBase *dcbase, CPUState *cpu)

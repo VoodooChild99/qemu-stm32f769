@@ -147,6 +147,10 @@ static void rr_force_rcu(Notifier *notify, void *data)
  * elsewhere.
  */
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#include "afl-system-fuzzing/afl.h"
+#endif
+
 static void *rr_cpu_thread_fn(void *arg)
 {
     Notifier force_rcu;
@@ -156,7 +160,15 @@ static void *rr_cpu_thread_fn(void *arg)
     rcu_register_thread();
     force_rcu.notify = rr_force_rcu;
     rcu_add_force_rcu_notifier(&force_rcu);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (afl_wants_to_resume_exec) {
+        tcg_ctx = restart_tcg_ctx[0];
+    } else {
+#endif
     tcg_register_thread();
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    }
+#endif
 
     qemu_mutex_lock_iothread();
     qemu_thread_get_self(cpu->thread);
@@ -204,8 +216,11 @@ static void *rr_cpu_thread_fn(void *arg)
         if (!cpu) {
             cpu = first_cpu;
         }
-
+#ifndef CONFIG_AFL_SYSTEM_FUZZING
         while (cpu && cpu_work_list_empty(cpu) && !cpu->exit_request) {
+#else
+        while (cpu && cpu_work_list_empty(cpu) && !cpu->exit_request && !afl_wants_cpu_to_stop) {
+#endif
 
             qatomic_mb_set(&rr_current_cpu, cpu);
             current_cpu = cpu;
@@ -235,6 +250,11 @@ static void *rr_cpu_thread_fn(void *arg)
                     qemu_mutex_lock_iothread();
                     break;
                 }
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+                else if (afl_wants_cpu_to_stop) {
+                    break;
+                }
+#endif
             } else if (cpu->stop) {
                 if (cpu->unplug) {
                     cpu = CPU_NEXT(cpu);
@@ -252,6 +272,12 @@ static void *rr_cpu_thread_fn(void *arg)
             qatomic_mb_set(&cpu->exit_request, 0);
         }
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+        if (afl_wants_cpu_to_stop) {
+            break;
+        }
+#endif
+
         if (icount_enabled() && all_cpu_threads_idle()) {
             /*
              * When all cpus are sleeping (e.g in WFI), to avoid a deadlock
@@ -264,6 +290,22 @@ static void *rr_cpu_thread_fn(void *arg)
         rr_deal_with_unplugged_cpus();
     }
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (afl_wants_cpu_to_stop) {
+        // nofify the MAIN thread
+        if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
+            perror("write afl_qemuloop_pipe");
+        }
+        // leave cpu alone
+        // save tcg context
+        restart_tcg_ctx[0] = tcg_ctx;
+        // stop all vcpu
+        pause_all_vcpus();
+        // release BQL
+        qemu_mutex_unlock_iothread();
+    }
+#endif
+
     rcu_remove_force_rcu_notifier(&force_rcu);
     rcu_unregister_thread();
     return NULL;
@@ -273,15 +315,29 @@ void rr_start_vcpu_thread(CPUState *cpu)
 {
     char thread_name[VCPU_THREAD_NAME_SIZE];
     static QemuCond *single_tcg_halt_cond;
+#ifndef CONFIG_AFL_SYSTEM_FUZZING
     static QemuThread *single_tcg_cpu_thread;
+#endif
 
     g_assert(tcg_enabled());
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (!afl_wants_to_resume_exec) {
+#endif
     tcg_cpu_init_cflags(cpu, false);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    }
+#endif
 
     if (!single_tcg_cpu_thread) {
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+        if (!afl_wants_to_resume_exec) {
+#endif
         cpu->thread = g_malloc0(sizeof(QemuThread));
         cpu->halt_cond = g_malloc0(sizeof(QemuCond));
         qemu_cond_init(cpu->halt_cond);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+        }
+#endif
 
         /* share a single thread for all cpus with TCG */
         snprintf(thread_name, VCPU_THREAD_NAME_SIZE, "ALL CPUs/TCG");

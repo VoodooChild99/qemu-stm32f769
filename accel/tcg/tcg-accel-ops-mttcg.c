@@ -62,6 +62,10 @@ static void mttcg_force_rcu(Notifier *notify, void *data)
  * current CPUState for a given thread.
  */
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#include "afl-system-fuzzing/afl.h"
+#endif
+
 static void *mttcg_cpu_thread_fn(void *arg)
 {
     MttcgForceRcuNotifier force_rcu;
@@ -74,7 +78,15 @@ static void *mttcg_cpu_thread_fn(void *arg)
     force_rcu.notifier.notify = mttcg_force_rcu;
     force_rcu.cpu = cpu;
     rcu_add_force_rcu_notifier(&force_rcu.notifier);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (afl_wants_to_resume_exec) {
+        tcg_ctx = restart_tcg_ctx[cpu->cpu_index];
+    } else {
+#endif
     tcg_register_thread();
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    }
+#endif
 
     qemu_mutex_lock_iothread();
     qemu_thread_get_self(cpu->thread);
@@ -121,7 +133,25 @@ static void *mttcg_cpu_thread_fn(void *arg)
 
         qatomic_mb_set(&cpu->exit_request, 0);
         qemu_wait_io_event(cpu);
+#ifndef CONFIG_AFL_SYSTEM_FUZZING
     } while (!cpu->unplug || cpu_can_run(cpu));
+#else
+    } while ((!cpu->unplug || cpu_can_run(cpu)) && !afl_wants_cpu_to_stop);
+#endif
+
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (afl_wants_cpu_to_stop) {
+        // nofify the MAIN thread
+        if (write(afl_qemuloop_pipe[1], "FORK", 4) != 4) {
+            perror("write afl_qemuloop_pipe");
+        }
+        // leave cpu alone
+        // save tcg context
+        restart_tcg_ctx[cpu->cpu_index] = tcg_ctx;
+        // stop all vcpu
+        pause_all_vcpus();
+    }
+#endif
 
     tcg_cpus_destroy(cpu);
     qemu_mutex_unlock_iothread();
@@ -140,11 +170,17 @@ void mttcg_start_vcpu_thread(CPUState *cpu)
     char thread_name[VCPU_THREAD_NAME_SIZE];
 
     g_assert(tcg_enabled());
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (!afl_wants_to_resume_exec) {
+#endif
     tcg_cpu_init_cflags(cpu, current_machine->smp.max_cpus > 1);
 
     cpu->thread = g_malloc0(sizeof(QemuThread));
     cpu->halt_cond = g_malloc0(sizeof(QemuCond));
     qemu_cond_init(cpu->halt_cond);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    }
+#endif
 
     /* create a thread per vCPU with TCG (MTTCG) */
     snprintf(thread_name, VCPU_THREAD_NAME_SIZE, "CPU %d/TCG",

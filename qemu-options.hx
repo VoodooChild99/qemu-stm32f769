@@ -5460,6 +5460,13 @@ SRST
             (qemu) qom-set /objects/iothread1 poll-max-ns 100000
 ERST
 
+DEF("afl-input-file", HAS_ARG, QEMU_OPTION_afl_input_file,
+    "-afl-input-file fname  AFL input sourced from fname\n", QEMU_ARCH_ALL)
+SRST
+``-afl-input-file fname``
+    denote input file from fuzzer
+ERST
+
 
 HXCOMM This is the last statement. Insert new options before this line!
 

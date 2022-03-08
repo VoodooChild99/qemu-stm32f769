@@ -544,6 +544,169 @@ void tcg_pool_reset(TCGContext *s)
 
 #include "exec/helper-proto.h"
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#include "afl-system-fuzzing/afl.h"
+
+uint8_t* testcase = NULL;
+int testcase_len = 0;
+int testcase_buf_len = 0x4000;
+
+static target_ulong start_forkserver(CPUArchState *env, target_ulong enable_ticks) {
+    assert(!afl_fork_child);
+    assert(afl_input_file);
+
+    afl_enable_ticks = enable_ticks;
+    afl_wants_cpu_to_stop = 1;
+    testcase = g_malloc(testcase_buf_len);
+    return 0;
+}
+
+static target_ulong get_input_len(CPUArchState *env)
+{
+    // printf("pid %d: getWork %x %x\n", getpid(), ptr, sz);fflush(stdout);
+    int file_len = 0;
+    assert(afl_start == 0);
+
+    FILE *fp;
+
+    fp = fopen(afl_input_file, "rb");
+    if(!fp) {
+        perror(afl_input_file);
+        exit(0);
+    }
+    fseek(fp, 0, SEEK_END);
+    file_len = ftell(fp);
+
+    if (!file_len) {
+        fclose(fp);
+        exit(0);
+    }
+
+    fseek(fp, 0, SEEK_SET);
+    if (file_len > testcase_buf_len) {
+        testcase = g_realloc(testcase, file_len);
+    }
+    testcase_len = fread(testcase, 1, file_len, fp);
+    fclose(fp);
+
+    if (testcase_len == 0) {
+        abort();
+    } 
+
+    return testcase_len;
+}
+
+static target_ulong get_input_and_start_coverage_trace(CPUArchState *env, target_ulong ptr)
+{
+    // printf("pid %d: startWork\n", getpid());fflush(stdout);
+
+    cpu_physical_memory_write((hwaddr)ptr, testcase, testcase_len);
+
+    afl_start = 1;
+    
+    return 0;
+}
+
+static target_ulong end_fuzzing(target_ulong val)
+{
+    // printf("pid %d: doneWork %x\n", getpid(), val);fflush(stdout);
+    assert(afl_start == 1);
+    afl_start = 0;
+    exit(val); /* exit forkserver child */
+}
+
+static target_ulong abort_fuzzing(void)
+{
+    assert(afl_start == 1);
+    afl_start = 0;
+    abort();
+}
+
+FILE* gcov_gcda_fd = NULL;
+char* gcov_gcda_filename = NULL;
+
+target_ulong helper_afl_hypercall(
+    CPUArchState *env, target_ulong code, target_ulong a0, target_ulong a1
+) {
+    switch(code) {
+    case 1: return start_forkserver(env, a0);
+    case 2: return get_input_len(env);
+    case 3: return get_input_and_start_coverage_trace(env, a0);
+    case 4: return end_fuzzing(a0);
+    case 6: return abort_fuzzing();
+    case 9: {
+        helper_afl_trace(a0);
+        return -1;
+    }
+    case 10: {
+        assert(!gcov_gcda_filename);
+        assert(!gcov_gcda_fd);
+        assert(a0);
+        assert(a1);
+        gcov_gcda_filename = g_malloc(a1 + 1);
+        cpu_physical_memory_read(a0, gcov_gcda_filename, a1 + 1);
+        printf("%s\n", gcov_gcda_filename);
+        gcov_gcda_fd = fopen(gcov_gcda_filename, "r+b");
+        if (!gcov_gcda_fd) {
+            gcov_gcda_fd = fopen(gcov_gcda_filename, "w+b");
+            if (!gcov_gcda_fd) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+    case 11: {
+        assert(gcov_gcda_fd);
+        fseek(gcov_gcda_fd, 0, SEEK_SET);
+        return 0;
+    }
+    case 12: {
+        assert(gcov_gcda_fd);
+        target_ulong val;
+        if (fread(&val, sizeof(target_ulong), 1, gcov_gcda_fd) == 1) {
+            return val;
+        } else {
+            return 0;
+        }
+    }
+    case 13: {
+        assert(gcov_gcda_fd);
+        fwrite(&a0, sizeof(target_ulong), 1, gcov_gcda_fd);
+        return 0;
+    }
+    case 14: {
+        assert(gcov_gcda_filename);
+        printf("error: %s\n", gcov_gcda_filename);
+        fflush(stdout);
+        return 0;
+    }
+    case 15: {
+        assert(gcov_gcda_fd);
+        assert(gcov_gcda_filename);
+        fclose(gcov_gcda_fd);
+        gcov_gcda_fd = NULL;
+        g_free(gcov_gcda_filename);
+        gcov_gcda_filename = NULL;
+        return 0;
+    }
+    default: return -1;
+    }
+}
+
+void helper_afl_trace(target_ulong pc) {
+    if (likely(afl_start && afl_area_ptr)) {
+        afl_trace(pc);
+    }
+}
+
+void helper_afl_trace_const(target_ulong index, target_ulong new_prev) {
+    if (likely(afl_start && afl_area_ptr)) {
+        afl_trace_const_hash(index, new_prev);
+    }
+}
+
+#endif
+
 static const TCGHelperInfo all_helpers[] = {
 #include "exec/helper-tcg.h"
 };

@@ -343,6 +343,11 @@ const void *HELPER(lookup_tb_ptr)(CPUArchState *env)
  * TCG is not considered a security-sensitive part of QEMU so this does not
  * affect the impact of CFI in environment with high security requirements
  */
+
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#include "afl-system-fuzzing/afl-qemu-cpu-inl.h"
+#endif
+
 static inline TranslationBlock * QEMU_DISABLE_CFI
 cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
 {
@@ -397,6 +402,12 @@ cpu_tb_exec(CPUState *cpu, TranslationBlock *itb, int *tb_exit)
         cpu->exception_index = EXCP_DEBUG;
         cpu_loop_exit(cpu);
     }
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (unlikely(afl_wants_cpu_to_stop)) {
+        /* stop the current CPU, return to MAIN thread */
+        cpu_stop_current();
+    }
+#endif
 
     return last_tb;
 }
@@ -979,6 +990,14 @@ int cpu_exec(CPUState *cpu)
                  * We add the TB in the virtual pc hash table
                  * for the fast lookup
                  */
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#ifdef AFL_QEMU_SYSTEM_TSL
+                /* tell parent that we just translated a block */
+                afl_request_code_translate(
+                    pc, cs_base, flags, cflags, cpu->cpu_index
+                );
+#endif
+#endif
                 qatomic_set(&cpu->tb_jmp_cache[tb_jmp_cache_hash_func(pc)], tb);
             }
 
@@ -996,6 +1015,11 @@ int cpu_exec(CPUState *cpu)
             /* See if we can patch the calling TB. */
             if (last_tb) {
                 tb_add_jump(last_tb, tb_exit, tb);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+#ifdef AFL_QEMU_SYSTEM_TSL
+                afl_request_block_chaining(last_tb, tb, tb_exit, cpu->cpu_index);
+#endif
+#endif
             }
 
             cpu_loop_exec_tb(cpu, tb, &last_tb, &tb_exit);

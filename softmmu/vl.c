@@ -2765,6 +2765,10 @@ void qmp_x_exit_preconfig(Error **errp)
     }
 }
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+extern const char *afl_input_file;
+#endif
+
 void qemu_init(int argc, char **argv, char **envp)
 {
     QemuOpts *opts;
@@ -2859,6 +2863,11 @@ void qemu_init(int argc, char **argv, char **envp)
                 exit(1);
             }
             switch(popt->index) {
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+            case QEMU_OPTION_afl_input_file:
+                afl_input_file = optarg;
+                break;
+#endif
             case QEMU_OPTION_cpu:
                 /* hw initialization will check this */
                 cpu_option = optarg;

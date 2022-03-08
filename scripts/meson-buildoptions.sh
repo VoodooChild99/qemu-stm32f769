@@ -22,6 +22,8 @@ meson_options_help() {
   printf "%s\n" 'disabled with --disable-FEATURE, default is enabled if available'
   printf "%s\n" '(unless built with --without-default-features):'
   printf "%s\n" ''
+  printf "%s\n" '  afl-system-fuzzing'
+  printf "%s\n" '                  work with AFL'
   printf "%s\n" '  alsa            ALSA sound support'
   printf "%s\n" '  attr            attr/xattr support'
   printf "%s\n" '  auth-pam        PAM access control'
@@ -103,6 +105,8 @@ meson_options_help() {
 }
 _meson_option_parse() {
   case $1 in
+    --enable-afl-system-fuzzing) printf "%s" -Dafl_system_fuzzing=enabled ;;
+    --disable-afl-system-fuzzing) printf "%s" -Dafl_system_fuzzing=disabled ;;
     --enable-alsa) printf "%s" -Dalsa=enabled ;;
     --disable-alsa) printf "%s" -Dalsa=disabled ;;
     --enable-attr) printf "%s" -Dattr=enabled ;;

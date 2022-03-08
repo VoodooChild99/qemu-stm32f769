@@ -1435,6 +1435,14 @@ endif
 foreach k : get_option('trace_backends')
   config_host_data.set('CONFIG_TRACE_' + k.to_upper(), true)
 endforeach
+
+afl_system_fuzzing_enabled = false
+if get_option('afl_system_fuzzing').enabled()
+  if targetos == 'linux' and have_system
+    afl_system_fuzzing_enabled = true
+  endif
+endif
+
 config_host_data.set_quoted('CONFIG_TRACE_FILE', get_option('trace_file'))
 
 config_host_data.set_quoted('CONFIG_BINDIR', get_option('prefix') / get_option('bindir'))
@@ -1898,6 +1906,9 @@ foreach target : target_dirs
     config_target += { 'CONFIG_BSD_USER': 'y' }
   elif target.endswith('softmmu')
     config_target += { 'CONFIG_SOFTMMU': 'y' }
+    if afl_system_fuzzing_enabled
+      config_target += { 'CONFIG_AFL_SYSTEM_FUZZING': 'y' }
+    endif
   endif
   if target.endswith('-user')
     config_target += {
@@ -2026,6 +2037,7 @@ config_all += {
   'CONFIG_SOFTMMU': have_system,
   'CONFIG_USER_ONLY': have_user,
   'CONFIG_ALL': true,
+  'CONFIG_AFL_SYSTEM_FUZZING': afl_system_fuzzing_enabled,
 }
 
 ##############
@@ -3256,6 +3268,7 @@ summary_info += {'vhost-user-blk server support': have_vhost_user_blk_server}
 summary_info += {'vhost-user-fs support': config_host.has_key('CONFIG_VHOST_USER_FS')}
 summary_info += {'vhost-vdpa support': config_host.has_key('CONFIG_VHOST_VDPA')}
 summary_info += {'build guest agent': config_host.has_key('CONFIG_GUEST_AGENT')}
+summary_info += {'system level fuzzing with AFL': afl_system_fuzzing_enabled}
 summary(summary_info, bool_yn: true, section: 'Configurable features')
 
 # Compilation information

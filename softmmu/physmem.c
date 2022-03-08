@@ -2038,8 +2038,10 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
          * KVM is not used and it may be forked (eg for fuzzing purposes).
          */
         if (!qtest_enabled()) {
+#ifndef CONFIG_AFL_SYSTEM_FUZZING
             qemu_madvise(new_block->host, new_block->max_length,
                          QEMU_MADV_DONTFORK);
+#endif
         }
         ram_block_notify_add(new_block->host, new_block->used_length,
                              new_block->max_length);
