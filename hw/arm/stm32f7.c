@@ -134,7 +134,8 @@ static const MEMInfo stm32f769nidiscovery_meminfo[] = { {
         // merge dtcm-ram, sram1 and sram2
         .name = "sram",
         .base = 0x20000000,
-        .size = 0x80000,
+        // let's go, QEMU!!!
+        .size = 0x20000000,
         .type = MEM_RAM,
     }, {
         .name = "sdram",
