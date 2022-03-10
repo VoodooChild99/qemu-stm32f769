@@ -1,7 +1,7 @@
 /*
  * STM32F7XX USART
  * 
- * Copyright (C) 2022 Southeast University
+ * Copyright (C) 2022 JSSEC
  * 
  * Authors:
  * 	Rayhub <leicq@seu.edu.cn>
