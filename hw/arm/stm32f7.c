@@ -124,7 +124,7 @@ static const MEMInfo stm32f769nidiscovery_meminfo[] = { {
         .name = "flash-axim",
         .base = 0x08000000,
         // in case
-        .size = 0x00400000,
+        .size = 0x00800000,
         .type = MEM_ROM
     }, {
         .name = "option-bytes",
@@ -493,7 +493,7 @@ static void stm32f769idiscovery_class_init(ObjectClass *oc, void *data) {
     smc->num_mem_info = (
         sizeof(stm32f769nidiscovery_meminfo) / sizeof(stm32f769nidiscovery_meminfo[0])
     );
-    smc->flash_size = 0x400000;
+    smc->flash_size = 0x800000;
 }
 
 static const TypeInfo stm32f7_info = {
