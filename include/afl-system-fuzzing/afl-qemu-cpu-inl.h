@@ -125,11 +125,11 @@ void afl_forkserver(void) {
             exit(2);
         }
 
-        if (was_killed) {
-            if (waitpid(child_pid, &status, 0) < 0) {
-                exit(1);
-            }
-        }
+        // if (was_killed) {
+        //     if (waitpid(child_pid, &status, 0) < 0) {
+        //         exit(1);
+        //     }
+        // }
 
 #ifdef AFL_QEMU_SYSTEM_TSL
         if (pipe(t_fd) || dup2(t_fd[1], TSL_FD) < 0) {
