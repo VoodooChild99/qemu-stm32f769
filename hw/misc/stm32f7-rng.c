@@ -50,6 +50,7 @@ static void stm32f7_rng_register_reset(STM32F7RNG *t) {
 	t->CR = 0x00000000;
 	t->SR = 0x00000000;
 	t->DR = 0x00000000;
+	t->rnd = g_rand_new_with_seed(0xdeadbeef);
 }
 
 static uint64_t stm32f7_rng_read(void *opaque, hwaddr offset, unsigned size) {
@@ -61,10 +62,10 @@ static uint64_t stm32f7_rng_read(void *opaque, hwaddr offset, unsigned size) {
 			ret = t->CR;
 			break;
 		case A_SR:
-			ret = t->SR;
+			ret = (t->SR | R_SR_DRDY_MASK);
 			break;
 		case A_DR:
-			ret = t->DR;
+			ret = g_rand_int(t->rnd);
 			break;
 		default:
 			qemu_log_mask(LOG_GUEST_ERROR, "STM32F7 RNG read: bad offset %x\n", (int)offset);

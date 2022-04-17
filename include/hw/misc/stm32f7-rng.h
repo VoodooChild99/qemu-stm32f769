@@ -43,6 +43,9 @@ struct STM32F7RNG {
 	uint32_t CR;
 	uint32_t SR;
 	uint32_t DR;
+
+	/* random */
+	GRand* rnd;
 };
 
 #endif
