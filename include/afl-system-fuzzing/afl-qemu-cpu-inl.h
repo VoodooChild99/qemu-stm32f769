@@ -30,6 +30,7 @@
 /* init extern vars */
 /* input file */
 const char *afl_input_file = NULL;
+int afl_fuzz_mbedtls = 0;
 
 int afl_qemuloop_pipe[2] = {0, 0};
 int afl_wants_to_resume_exec = 0;

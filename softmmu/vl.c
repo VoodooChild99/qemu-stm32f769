@@ -2767,6 +2767,7 @@ void qmp_x_exit_preconfig(Error **errp)
 
 #ifdef CONFIG_AFL_SYSTEM_FUZZING
 extern const char *afl_input_file;
+extern int afl_fuzz_mbedtls;
 #endif
 
 void qemu_init(int argc, char **argv, char **envp)
@@ -2866,6 +2867,9 @@ void qemu_init(int argc, char **argv, char **envp)
 #ifdef CONFIG_AFL_SYSTEM_FUZZING
             case QEMU_OPTION_afl_input_file:
                 afl_input_file = optarg;
+                break;
+            case QEMU_OPTION_E:
+                afl_fuzz_mbedtls = 1;
                 break;
 #endif
             case QEMU_OPTION_cpu:

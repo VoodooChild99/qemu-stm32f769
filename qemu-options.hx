@@ -5467,6 +5467,14 @@ SRST
     denote input file from fuzzer
 ERST
 
+DEF("E", 0, QEMU_OPTION_E, \
+    "-E              fuzz mbedtls\n",
+    QEMU_ARCH_ALL)
+SRST
+``-E``
+    fuzz mbedtls.
+ERST
+
 
 HXCOMM This is the last statement. Insert new options before this line!
 

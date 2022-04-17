@@ -555,9 +555,9 @@ static target_ulong start_forkserver(CPUArchState *env, target_ulong enable_tick
     assert(!afl_fork_child);
     assert(afl_input_file);
 
+    testcase = g_malloc(testcase_buf_len);
     afl_enable_ticks = enable_ticks;
     afl_wants_cpu_to_stop = 1;
-    testcase = g_malloc(testcase_buf_len);
     return 0;
 }
 
@@ -574,25 +574,31 @@ static target_ulong get_input_len(CPUArchState *env)
         perror(afl_input_file);
         exit(0);
     }
-    fseek(fp, 0, SEEK_END);
-    file_len = ftell(fp);
 
-    if (!file_len) {
-        fclose(fp);
-        exit(0);
+    if (afl_fuzz_mbedtls) {
+        uint32_t offset;
+        assert(fread(&file_len, sizeof(uint32_t), 1, fp) == 1);
+        assert(fread(&offset, sizeof(uint32_t), 1, fp) == 1);
+        fseek(fp, offset, SEEK_CUR);
+    } else {
+        fseek(fp, 0, SEEK_END);
+        file_len = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
     }
 
-    fseek(fp, 0, SEEK_SET);
-    if (file_len > testcase_buf_len) {
+    if ((file_len > testcase_buf_len) && testcase) {
         testcase = g_realloc(testcase, file_len);
     }
+
+    if (!testcase || !file_len) {
+        testcase_len = 0;
+        goto get_input_len_exit;
+    }
+
     testcase_len = fread(testcase, 1, file_len, fp);
+
+get_input_len_exit:
     fclose(fp);
-
-    if (testcase_len == 0) {
-        abort();
-    } 
-
     return testcase_len;
 }
 
@@ -600,7 +606,9 @@ static target_ulong get_input_and_start_coverage_trace(CPUArchState *env, target
 {
     // printf("pid %d: startWork\n", getpid());fflush(stdout);
 
-    cpu_physical_memory_write((hwaddr)ptr, testcase, testcase_len);
+    if (testcase && testcase_len) {
+        cpu_physical_memory_write((hwaddr)ptr, testcase, testcase_len);
+    }
 
     afl_start = 1;
     
@@ -645,7 +653,7 @@ target_ulong helper_afl_hypercall(
         assert(a1);
         gcov_gcda_filename = g_malloc(a1 + 1);
         cpu_physical_memory_read(a0, gcov_gcda_filename, a1 + 1);
-        printf("%s\n", gcov_gcda_filename);
+        // printf("%s\n", gcov_gcda_filename);
         gcov_gcda_fd = fopen(gcov_gcda_filename, "r+b");
         if (!gcov_gcda_fd) {
             gcov_gcda_fd = fopen(gcov_gcda_filename, "w+b");

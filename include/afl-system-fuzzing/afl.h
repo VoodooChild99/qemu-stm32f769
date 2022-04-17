@@ -25,6 +25,7 @@
 
 /* external variables */
 extern const char *afl_input_file;
+extern int afl_fuzz_mbedtls;
 // extern const char *block_black_list_file;
 // extern GHashTable *block_black_list_hash_table;
 
