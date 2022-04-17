@@ -1,6 +1,8 @@
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
 DEF_HELPER_4(afl_hypercall, tl, env, tl ,tl, tl)
 DEF_HELPER_1(afl_trace, void, tl)
 DEF_HELPER_2(afl_trace_const, void, tl, tl)
+#endif
 
 DEF_HELPER_FLAGS_1(sxtb16, TCG_CALL_NO_RWG_SE, i32, i32)
 DEF_HELPER_FLAGS_1(uxtb16, TCG_CALL_NO_RWG_SE, i32, i32)
