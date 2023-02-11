@@ -81,6 +81,10 @@ static void *mttcg_cpu_thread_fn(void *arg)
 #ifdef CONFIG_AFL_SYSTEM_FUZZING
     if (afl_wants_to_resume_exec) {
         tcg_ctx = restart_tcg_ctx[cpu->cpu_index];
+        if (cpu->env_modified) {
+            afl_load_arch_state(cpu->state_ptr, cpu->env_ptr, false);
+            cpu->env_modified = false;
+        }
     } else {
 #endif
     tcg_register_thread();

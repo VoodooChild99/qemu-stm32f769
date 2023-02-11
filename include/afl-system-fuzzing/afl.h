@@ -42,6 +42,7 @@ extern int afl_wants_cpu_to_stop;
 
 extern unsigned char *afl_area_ptr;
 extern uint32_t afl_map_size;
+extern unsigned char afl_state_ptr[0x400];
 
 /* fcuntions */
 void afl_setup(void);

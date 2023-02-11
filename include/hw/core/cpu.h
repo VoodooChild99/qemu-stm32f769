@@ -251,6 +251,13 @@ struct qemu_work_item;
 #define CPU_UNSET_NUMA_NODE_ID -1
 #define CPU_TRACE_DSTATE_MAX_EVENTS 32
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+void afl_extract_arch_state(void *afl_arch, void *cpu_arch,
+                                   bool serialize);
+void afl_load_arch_state(void *afl_arch, void *cpu_arch,
+                                   bool deserialize);
+#endif
+
 /**
  * CPUState:
  * @cpu_index: CPU index (informative).
@@ -419,6 +426,12 @@ struct CPUState {
 
     /* track IOMMUs whose translations we've cached in the TCG TLB */
     GArray *iommu_notifiers;
+
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    /* AFL */
+    void *state_ptr;
+    bool env_modified;
+#endif
 };
 
 typedef QTAILQ_HEAD(CPUTailQ, CPUState) CPUTailQ;

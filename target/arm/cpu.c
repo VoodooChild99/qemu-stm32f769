@@ -43,6 +43,242 @@
 #include "disas/capstone.h"
 #include "fpu/softfloat.h"
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+void afl_extract_arch_state(void *afl_state, void *cpu_state,
+                                   bool serialize) {
+    AFLArmState *as = (AFLArmState*)afl_state;
+    CPUARMState *env = (CPUARMState*)cpu_state;
+    ARMCPU *cpu = ARM_CPU(env_cpu(env));
+
+    as->pc = env->pc;
+    as->pstate = env->pstate;
+    as->aarch64 = env->aarch64;
+    as->hflags = env->hflags;
+    as->uncached_cpsr = env->uncached_cpsr;
+    as->thumb = env->thumb;
+    as->condexec_bits = env->condexec_bits;
+    as->btype = env->btype;
+
+    memcpy(as->cp15.sctlr_el, env->cp15.sctlr_el, sizeof(env->cp15.sctlr_el));
+    memcpy(as->cp15.ttbr0_el, env->cp15.ttbr0_el, sizeof(env->cp15.ttbr0_el));
+    memcpy(as->cp15.ttbr1_el, env->cp15.ttbr1_el, sizeof(env->cp15.ttbr1_el));
+    as->cp15.vttbr_el2 = env->cp15.vttbr_el2;
+    as->cp15.vsttbr_el2 = env->cp15.vsttbr_el2;
+    memcpy(as->cp15.tcr_el, env->cp15.tcr_el, sizeof(env->cp15.tcr_el));
+    memcpy(&as->cp15.vtcr_el2, &env->cp15.vtcr_el2, sizeof(env->cp15.vtcr_el2));
+    as->cp15.c2_data = env->cp15.c2_data;
+    as->cp15.c2_insn = env->cp15.c2_insn;
+    as->cp15.dacr_ns = env->cp15.dacr_ns;
+    as->cp15.dacr_s = env->cp15.dacr_s;
+    as->cp15.pmsav5_data_ap = env->cp15.pmsav5_data_ap;
+    as->cp15.pmsav5_insn_ap = env->cp15.pmsav5_insn_ap;
+    as->cp15.hcr_el2 = env->cp15.hcr_el2;
+    as->cp15.scr_el3 = env->cp15.scr_el3;
+    memcpy(as->cp15.c6_region, env->cp15.c6_region, sizeof(env->cp15.c6_region));
+    memcpy(as->cp15.mair_el, env->cp15.mair_el, sizeof(env->cp15.mair_el));
+    as->cp15.fcseidr_ns = env->cp15.fcseidr_ns;
+    as->cp15.fcseidr_s = env->cp15.fcseidr_s;
+
+    memcpy(as->v7m.control, env->v7m.control, sizeof(env->v7m.control));
+    memcpy(as->v7m.mpu_ctrl, env->v7m.mpu_ctrl, sizeof(env->v7m.mpu_ctrl));
+    as->v7m.exception = env->v7m.exception;
+    as->v7m.secure = env->v7m.secure;
+
+    as->features = env->features;
+
+    as->sau.ctrl = env->sau.ctrl;
+    if (!serialize) {
+        fflush(stdout);
+        if (env->pmsav7.drbar) {
+            memcpy(as->pmsav7.drbar, env->pmsav7.drbar,
+                sizeof(*env->pmsav7.drbar) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav7.drsr, env->pmsav7.drsr,
+                sizeof(*env->pmsav7.drsr) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav7.dracr, env->pmsav7.dracr,
+                sizeof(*env->pmsav7.dracr) * cpu->pmsav7_dregion);
+        }
+
+        if (env->pmsav8.rbar[M_REG_NS]) {
+            memcpy(as->pmsav8.rbar[M_REG_NS], env->pmsav8.rbar[M_REG_NS],
+                sizeof(*(env->pmsav8.rbar[M_REG_NS])) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav8.rlar[M_REG_NS], env->pmsav8.rlar[M_REG_NS],
+                sizeof(*(env->pmsav8.rlar[M_REG_NS])) * cpu->pmsav7_dregion);
+        }
+
+        if (env->pmsav8.rbar[M_REG_S]) {
+            memcpy(as->pmsav8.rbar[M_REG_S], env->pmsav8.rbar[M_REG_S],
+                sizeof(*(env->pmsav8.rbar[M_REG_S])) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav8.rlar[M_REG_S], env->pmsav8.rlar[M_REG_S],
+                sizeof(*(env->pmsav8.rlar[M_REG_S])) * cpu->pmsav7_dregion);
+        }
+
+        if (env->sau.rbar) {
+            memcpy(as->sau.rbar, env->sau.rbar,
+                sizeof(*env->sau.rbar) * cpu->sau_sregion);
+            memcpy(as->sau.rlar, env->sau.rlar,
+                sizeof(*env->sau.rlar) * cpu->sau_sregion);
+        }
+    } else {
+        uint8_t *cursor = ((uint8_t*)afl_state) + sizeof(AFLArmState);
+        if (env->pmsav7.drbar) {
+            memcpy(cursor, env->pmsav7.drbar,
+                sizeof(*env->pmsav7.drbar) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*env->pmsav7.drbar) * cpu->pmsav7_dregion);
+            memcpy(cursor, env->pmsav7.drsr,
+                sizeof(*env->pmsav7.drsr) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*env->pmsav7.drsr) * cpu->pmsav7_dregion);
+            memcpy(cursor, env->pmsav7.dracr,
+                sizeof(*env->pmsav7.dracr) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*env->pmsav7.dracr) * cpu->pmsav7_dregion);
+        }
+
+        if (env->pmsav8.rbar[M_REG_NS]) {
+            memcpy(cursor, env->pmsav8.rbar[M_REG_NS],
+                sizeof(*(env->pmsav8.rbar[M_REG_NS])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rbar[M_REG_NS])) * cpu->pmsav7_dregion);
+            memcpy(cursor, env->pmsav8.rlar[M_REG_NS],
+                sizeof(*(env->pmsav8.rlar[M_REG_NS])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rlar[M_REG_NS])) * cpu->pmsav7_dregion);
+        }
+
+        if (env->pmsav8.rbar[M_REG_S]) {
+            memcpy(cursor, env->pmsav8.rbar[M_REG_S],
+                sizeof(*(env->pmsav8.rbar[M_REG_S])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rbar[M_REG_S])) * cpu->pmsav7_dregion);
+            memcpy(cursor, env->pmsav8.rlar[M_REG_S],
+                sizeof(*(env->pmsav8.rlar[M_REG_S])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rlar[M_REG_S])) * cpu->pmsav7_dregion);
+        }
+
+        if (env->sau.rbar) {
+            memcpy(cursor, env->sau.rbar,
+                sizeof(*env->sau.rbar) * cpu->sau_sregion);
+            cursor += (sizeof(*env->sau.rbar) * cpu->sau_sregion);
+            memcpy(cursor, env->sau.rlar,
+                sizeof(*env->sau.rlar) * cpu->sau_sregion);
+            cursor += (sizeof(*env->sau.rlar) * cpu->sau_sregion);
+        }
+    }
+}
+
+void afl_load_arch_state(void *afl_state, void *cpu_state,
+                                bool deserialize) {
+    AFLArmState *env = (AFLArmState*)afl_state;
+    CPUARMState *as = (CPUARMState*)cpu_state;
+    ARMCPU *cpu = ARM_CPU(env_cpu(as));
+
+    as->pc = env->pc;
+    as->pstate = env->pstate;
+    as->aarch64 = env->aarch64;
+    as->hflags = env->hflags;
+    as->uncached_cpsr = env->uncached_cpsr;
+    as->thumb = env->thumb;
+    as->condexec_bits = env->condexec_bits;
+    as->btype = env->btype;
+
+    memcpy(as->cp15.sctlr_el, env->cp15.sctlr_el, sizeof(env->cp15.sctlr_el));
+    memcpy(as->cp15.ttbr0_el, env->cp15.ttbr0_el, sizeof(env->cp15.ttbr0_el));
+    memcpy(as->cp15.ttbr1_el, env->cp15.ttbr1_el, sizeof(env->cp15.ttbr1_el));
+    as->cp15.vttbr_el2 = env->cp15.vttbr_el2;
+    as->cp15.vsttbr_el2 = env->cp15.vsttbr_el2;
+    memcpy(as->cp15.tcr_el, env->cp15.tcr_el, sizeof(env->cp15.tcr_el));
+    memcpy(&as->cp15.vtcr_el2, &env->cp15.vtcr_el2, sizeof(env->cp15.vtcr_el2));
+    as->cp15.c2_data = env->cp15.c2_data;
+    as->cp15.c2_insn = env->cp15.c2_insn;
+    as->cp15.dacr_ns = env->cp15.dacr_ns;
+    as->cp15.dacr_s = env->cp15.dacr_s;
+    as->cp15.pmsav5_data_ap = env->cp15.pmsav5_data_ap;
+    as->cp15.pmsav5_insn_ap = env->cp15.pmsav5_insn_ap;
+    as->cp15.hcr_el2 = env->cp15.hcr_el2;
+    as->cp15.scr_el3 = env->cp15.scr_el3;
+    memcpy(as->cp15.c6_region, env->cp15.c6_region, sizeof(env->cp15.c6_region));
+    memcpy(as->cp15.mair_el, env->cp15.mair_el, sizeof(env->cp15.mair_el));
+    as->cp15.fcseidr_ns = env->cp15.fcseidr_ns;
+    as->cp15.fcseidr_s = env->cp15.fcseidr_s;
+
+    memcpy(as->v7m.control, env->v7m.control, sizeof(env->v7m.control));
+    memcpy(as->v7m.mpu_ctrl, env->v7m.mpu_ctrl, sizeof(env->v7m.mpu_ctrl));
+    as->v7m.exception = env->v7m.exception;
+    as->v7m.secure = env->v7m.secure;
+
+    as->features = env->features;
+
+    as->sau.ctrl = env->sau.ctrl;
+    if (!deserialize) {
+        fflush(stdout);
+        if (env->pmsav7.drbar) {
+            memcpy(as->pmsav7.drbar, env->pmsav7.drbar,
+                sizeof(*env->pmsav7.drbar) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav7.drsr, env->pmsav7.drsr,
+                sizeof(*env->pmsav7.drsr) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav7.dracr, env->pmsav7.dracr,
+                sizeof(*env->pmsav7.dracr) * cpu->pmsav7_dregion);
+        }
+
+        if (env->pmsav8.rbar[M_REG_NS]) {
+            memcpy(as->pmsav8.rbar[M_REG_NS], env->pmsav8.rbar[M_REG_NS],
+                sizeof(*(env->pmsav8.rbar[M_REG_NS])) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav8.rlar[M_REG_NS], env->pmsav8.rlar[M_REG_NS],
+                sizeof(*(env->pmsav8.rlar[M_REG_NS])) * cpu->pmsav7_dregion);
+        }
+
+        if (env->pmsav8.rbar[M_REG_S]) {
+            memcpy(as->pmsav8.rbar[M_REG_S], env->pmsav8.rbar[M_REG_S],
+                sizeof(*(env->pmsav8.rbar[M_REG_S])) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav8.rlar[M_REG_S], env->pmsav8.rlar[M_REG_S],
+                sizeof(*(env->pmsav8.rlar[M_REG_S])) * cpu->pmsav7_dregion);
+        }
+
+        if (env->sau.rbar) {
+            memcpy(as->sau.rbar, env->sau.rbar,
+                sizeof(*env->sau.rbar) * cpu->sau_sregion);
+            memcpy(as->sau.rlar, env->sau.rlar,
+                sizeof(*env->sau.rlar) * cpu->sau_sregion);
+        }
+    } else {
+        uint8_t *cursor = ((uint8_t*)afl_state) + sizeof(AFLArmState);
+        if (as->pmsav7.drbar) {
+            memcpy(as->pmsav7.drbar, cursor,
+                sizeof(*env->pmsav7.drbar) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*env->pmsav7.drbar) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav7.drsr, cursor,
+                sizeof(*env->pmsav7.drsr) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*env->pmsav7.drsr) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav7.dracr, cursor,
+                sizeof(*env->pmsav7.dracr) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*env->pmsav7.dracr) * cpu->pmsav7_dregion);
+        }
+
+        if (as->pmsav8.rbar[M_REG_NS]) {
+            memcpy(as->pmsav8.rbar[M_REG_NS], cursor,
+                sizeof(*(env->pmsav8.rbar[M_REG_NS])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rbar[M_REG_NS])) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav8.rlar[M_REG_NS], cursor,
+                sizeof(*(env->pmsav8.rlar[M_REG_NS])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rlar[M_REG_NS])) * cpu->pmsav7_dregion);
+        }
+
+        if (as->pmsav8.rbar[M_REG_S]) {
+            memcpy(as->pmsav8.rbar[M_REG_S], cursor,
+                sizeof(*(env->pmsav8.rbar[M_REG_S])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rbar[M_REG_S])) * cpu->pmsav7_dregion);
+            memcpy(as->pmsav8.rlar[M_REG_S], cursor,
+                sizeof(*(env->pmsav8.rlar[M_REG_S])) * cpu->pmsav7_dregion);
+            cursor += (sizeof(*(env->pmsav8.rlar[M_REG_S])) * cpu->pmsav7_dregion);
+        }
+
+        if (as->sau.rbar) {
+            memcpy(as->sau.rbar, cursor,
+                sizeof(*env->sau.rbar) * cpu->sau_sregion);
+            cursor += (sizeof(*env->sau.rbar) * cpu->sau_sregion);
+            memcpy(as->sau.rlar, cursor,
+                sizeof(*env->sau.rlar) * cpu->sau_sregion);
+            cursor += (sizeof(*env->sau.rlar) * cpu->sau_sregion);
+        }
+    }
+}
+#endif
+
 static void arm_cpu_set_pc(CPUState *cs, vaddr value)
 {
     ARMCPU *cpu = ARM_CPU(cs);
@@ -1409,6 +1645,9 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
     ARMCPU *cpu = ARM_CPU(dev);
     ARMCPUClass *acc = ARM_CPU_GET_CLASS(dev);
     CPUARMState *env = &cpu->env;
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    AFLArmState *afl_env = &cpu->saved_state;
+#endif
     int pagebits;
     Error *local_err = NULL;
     bool no_aa32 = false;
@@ -1860,14 +2099,27 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
                 /* PMSAv8 */
                 env->pmsav8.rbar[M_REG_NS] = g_new0(uint32_t, nr);
                 env->pmsav8.rlar[M_REG_NS] = g_new0(uint32_t, nr);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+                afl_env->pmsav8.rbar[M_REG_NS] = g_new0(uint32_t, nr);
+                afl_env->pmsav8.rlar[M_REG_NS] = g_new0(uint32_t, nr);
+#endif
                 if (arm_feature(env, ARM_FEATURE_M_SECURITY)) {
                     env->pmsav8.rbar[M_REG_S] = g_new0(uint32_t, nr);
                     env->pmsav8.rlar[M_REG_S] = g_new0(uint32_t, nr);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+                    afl_env->pmsav8.rbar[M_REG_S] = g_new0(uint32_t, nr);
+                    afl_env->pmsav8.rlar[M_REG_S] = g_new0(uint32_t, nr);
+#endif
                 }
             } else {
                 env->pmsav7.drbar = g_new0(uint32_t, nr);
                 env->pmsav7.drsr = g_new0(uint32_t, nr);
                 env->pmsav7.dracr = g_new0(uint32_t, nr);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+                afl_env->pmsav7.drbar = g_new0(uint32_t, nr);
+                afl_env->pmsav7.drsr = g_new0(uint32_t, nr);
+                afl_env->pmsav7.dracr = g_new0(uint32_t, nr);
+#endif
             }
         }
     }
@@ -1883,6 +2135,10 @@ static void arm_cpu_realizefn(DeviceState *dev, Error **errp)
         if (nr) {
             env->sau.rbar = g_new0(uint32_t, nr);
             env->sau.rlar = g_new0(uint32_t, nr);
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+            afl_env->sau.rbar = g_new0(uint32_t, nr);
+            afl_env->sau.rlar = g_new0(uint32_t, nr);
+#endif
         }
     }
 

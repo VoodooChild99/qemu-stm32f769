@@ -666,12 +666,13 @@ static void afl_qemu_on_pipe_notified(void *ctx) {
     // now all vCPUs have exited
     // stop ticks
     cpu_disable_ticks();
+    // save reg state
+    CPU_FOREACH(cpu) {
+        afl_extract_arch_state(
+            cpu->state_ptr, cpu->env_ptr, false);
+    }
     // clear the flag
     afl_wants_cpu_to_stop = 0;
-
-    // CPU_FOREACH(cpu) {
-    //     qemu_thread_join(cpu->thread);
-    // }
 
     if (!mttcg_enabled) {
         // this is for the parent
@@ -717,6 +718,7 @@ void qemu_init_vcpu(CPUState *cpu)
     if (!restart_tcg_ctx) {
         restart_tcg_ctx = g_malloc0(sizeof(TCGContext*) * (ms->smp.cpus));
     }
+    cpu->env_modified = false;
     qemu_set_fd_handler(afl_qemuloop_pipe[0], afl_qemu_on_pipe_notified, NULL ,NULL);
 #endif
 

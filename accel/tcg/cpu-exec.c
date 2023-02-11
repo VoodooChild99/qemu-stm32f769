@@ -994,7 +994,7 @@ int cpu_exec(CPUState *cpu)
 #ifdef AFL_QEMU_SYSTEM_TSL
                 /* tell parent that we just translated a block */
                 afl_request_code_translate(
-                    pc, cs_base, flags, cflags, cpu->cpu_index
+                    pc, cs_base, flags, cflags, cpu->cpu_index, cpu->env_ptr
                 );
 #endif
 #endif
@@ -1017,7 +1017,8 @@ int cpu_exec(CPUState *cpu)
                 tb_add_jump(last_tb, tb_exit, tb);
 #ifdef CONFIG_AFL_SYSTEM_FUZZING
 #ifdef AFL_QEMU_SYSTEM_TSL
-                afl_request_block_chaining(last_tb, tb, tb_exit, cpu->cpu_index);
+                afl_request_block_chaining(last_tb, tb, tb_exit, cpu->cpu_index,
+                                           cpu->env_ptr);
 #endif
 #endif
             }

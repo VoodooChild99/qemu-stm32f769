@@ -189,6 +189,17 @@ static void *rr_cpu_thread_fn(void *arg)
         }
     }
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    if (afl_wants_to_resume_exec) {
+        CPU_FOREACH(cpu) {
+            if (cpu->env_modified) {
+                afl_load_arch_state(cpu->state_ptr, cpu->env_ptr, false);
+                cpu->env_modified = false;
+            }
+        }
+    }
+#endif
+
     rr_start_kick_timer();
 
     cpu = first_cpu;

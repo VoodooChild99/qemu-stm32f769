@@ -45,6 +45,7 @@ int afl_wants_cpu_to_stop;
 
 unsigned char *afl_area_ptr = NULL;
 uint32_t afl_map_size = MAP_SIZE;
+unsigned char afl_state_ptr[0x400] = {0};
 
 /* instrument ratio */
 static unsigned int afl_inst_rms = MAP_SIZE;
@@ -210,9 +211,9 @@ void afl_trace_const_hash(target_ulong index, target_ulong new_prev) {
 #ifdef AFL_QEMU_SYSTEM_TSL
 
 static void afl_request_code_translate(target_ulong, target_ulong, uint32_t,
-                                        uint32_t, int);
+                                        uint32_t, int, CPUArchState*);
 static void afl_request_block_chaining(TranslationBlock*, TranslationBlock*,
-                                        int, int);
+                                        int, int, CPUArchState*);
 
 struct afl_tsl {
     target_ulong pc;
@@ -237,7 +238,7 @@ struct afl_chain {
 
 static void afl_request_code_translate(target_ulong pc, target_ulong cs_base,
                                         uint32_t flags, uint32_t cflags,
-                                        int cpu_id) {
+                                        int cpu_id, CPUArchState *env) {
     struct afl_tsl t;
     uint8_t magic = 0;
 
@@ -258,11 +259,17 @@ static void afl_request_code_translate(target_ulong pc, target_ulong cs_base,
     if (write(TSL_FD, &t, sizeof(t)) != sizeof(t)) {
         return;
     }
+
+    afl_extract_arch_state(afl_state_ptr, env, true);
+    if (write(TSL_FD, afl_state_ptr, 0x400) != 0x400) {
+        return;
+    }
 }
 
 static void afl_request_block_chaining(TranslationBlock* last_tb,
                                         TranslationBlock* tb,
-                                        int tb_exit, int cpu_id) {
+                                        int tb_exit, int cpu_id,
+                                        CPUArchState *env) {
     struct afl_chain c;
     uint8_t magic = 1;
 
@@ -290,6 +297,11 @@ static void afl_request_block_chaining(TranslationBlock* last_tb,
     if (write(TSL_FD, &c, sizeof(c)) != sizeof(c)) {
         return;
     }
+
+    afl_extract_arch_state(afl_state_ptr, env, true);
+    if (write(TSL_FD, afl_state_ptr, 0x400) != 0x400) {
+        return;
+    }
 }
 
 static inline void tb_add_jump(TranslationBlock *tb, int n,
@@ -314,11 +326,18 @@ static void afl_wait_tsl(int fd) {
                 break;
             }
 
+            if (read(fd, afl_state_ptr, 0x400) != 0x400) {
+                break;
+            }
+
             cpu = qemu_get_cpu(c.cpu_id);
             assert(cpu);
             if (mttcg_enabled) {
                 tcg_ctx = restart_tcg_ctx[c.cpu_id];
             }
+            afl_load_arch_state(afl_state_ptr, cpu->env_ptr, true);
+            cpu->env_modified = true;
+
             last_tb = tb_lookup(cpu, c.last_pc, c.last_cs_base, c.last_flags,
                                 c.last_cflags);
             tb = tb_lookup(cpu, c.pc, c.cs_base, c.flags, c.cflags);
@@ -332,11 +351,17 @@ static void afl_wait_tsl(int fd) {
                 break;
             }
 
+            if (read(fd, afl_state_ptr, 0x400) != 0x400) {
+                break;
+            }
+
             cpu = qemu_get_cpu(t.cpu_id);
             assert(cpu);
             if (mttcg_enabled) {
                 tcg_ctx = restart_tcg_ctx[t.cpu_id];
             }
+            afl_load_arch_state(afl_state_ptr, cpu->env_ptr, true);
+            cpu->env_modified = true;
             mmap_lock();
             tb = tb_gen_code(cpu, t.pc, t.cs_base, t.flags, t.cflags);
             mmap_unlock();

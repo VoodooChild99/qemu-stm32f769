@@ -768,6 +768,173 @@ typedef enum ARMPSCIState {
 
 typedef struct ARMISARegisters ARMISARegisters;
 
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+typedef struct AFLArmState {
+
+    /* 32/64 switch only happens when taking and returning from
+     * exceptions so the overlap semantics are taken care of then
+     * instead of having a complicated union.
+     */
+    uint64_t pc;
+    /* PSTATE isn't an architectural register for ARMv8. However, it is
+     * convenient for us to assemble the underlying state into a 32 bit format
+     * identical to the architectural format used for the SPSR. (This is also
+     * what the Linux kernel's 'pstate' field in signal handlers and KVM's
+     * 'pstate' register are.) Of the PSTATE bits:
+     *  NZCV are kept in the split out env->CF/VF/NF/ZF, (which have the same
+     *    semantics as for AArch32, as described in the comments on each field)
+     *  nRW (also known as M[4]) is kept, inverted, in env->aarch64
+     *  DAIF (exception masks) are kept in env->daif
+     *  BTYPE is kept in env->btype
+     *  all other bits are stored in their correct places in env->pstate
+     */
+    uint32_t pstate;
+    uint32_t aarch64; /* 1 if CPU is in aarch64 state; inverse of PSTATE.nRW */
+
+    /* Cached TBFLAGS state.  See below for which bits are included.  */
+    CPUARMTBFlags hflags;
+
+    /* Frequently accessed CPSR bits are stored separately for efficiency.
+       This contains all the other bits.  Use cpsr_{read,write} to access
+       the whole CPSR.  */
+    uint32_t uncached_cpsr;
+
+    /* cpsr flag cache for faster execution */
+    uint32_t thumb; /* cpsr[5]. 0 = arm mode, 1 = thumb mode. */
+    uint32_t condexec_bits; /* IT bits.  cpsr[15:10,26:25].  */
+    uint32_t btype;  /* BTI branch type.  spsr[11:10].  */
+
+    /* System control coprocessor (cp15) */
+    struct {
+        union { /* System control register. */
+            struct {
+                uint64_t _unused_sctlr;
+                uint64_t sctlr_ns;
+                uint64_t hsctlr;
+                uint64_t sctlr_s;
+            };
+            uint64_t sctlr_el[4];
+        };
+        union { /* MMU translation table base 0. */
+            struct {
+                uint64_t _unused_ttbr0_0;
+                uint64_t ttbr0_ns;
+                uint64_t _unused_ttbr0_1;
+                uint64_t ttbr0_s;
+            };
+            uint64_t ttbr0_el[4];
+        };
+        union { /* MMU translation table base 1. */
+            struct {
+                uint64_t _unused_ttbr1_0;
+                uint64_t ttbr1_ns;
+                uint64_t _unused_ttbr1_1;
+                uint64_t ttbr1_s;
+            };
+            uint64_t ttbr1_el[4];
+        };
+        uint64_t vttbr_el2; /* Virtualization Translation Table Base.  */
+        uint64_t vsttbr_el2; /* Secure Virtualization Translation Table. */
+        /* MMU translation table base control. */
+        TCR tcr_el[4];
+        TCR vtcr_el2; /* Virtualization Translation Control.  */
+        TCR vstcr_el2; /* Secure Virtualization Translation Control. */
+        uint32_t c2_data; /* MPU data cacheable bits.  */
+        uint32_t c2_insn; /* MPU instruction cacheable bits.  */
+        union { /* MMU domain access control register
+                 * MPU write buffer control.
+                 */
+            struct {
+                uint64_t dacr_ns;
+                uint64_t dacr_s;
+            };
+            struct {
+                uint64_t dacr32_el2;
+            };
+        };
+        uint32_t pmsav5_data_ap; /* PMSAv5 MPU data access permissions */
+        uint32_t pmsav5_insn_ap; /* PMSAv5 MPU insn access permissions */
+        uint64_t hcr_el2; /* Hypervisor configuration register */
+        uint64_t scr_el3; /* Secure configuration register.  */
+        uint32_t c6_region[8]; /* MPU base/size registers.  */
+
+        union { /* Memory attribute redirection */
+            struct {
+#ifdef HOST_WORDS_BIGENDIAN
+                uint64_t _unused_mair_0;
+                uint32_t mair1_ns;
+                uint32_t mair0_ns;
+                uint64_t _unused_mair_1;
+                uint32_t mair1_s;
+                uint32_t mair0_s;
+#else
+                uint64_t _unused_mair_0;
+                uint32_t mair0_ns;
+                uint32_t mair1_ns;
+                uint64_t _unused_mair_1;
+                uint32_t mair0_s;
+                uint32_t mair1_s;
+#endif
+            };
+            uint64_t mair_el[4];
+        };
+        struct { /* FCSE PID. */
+            uint32_t fcseidr_ns;
+            uint32_t fcseidr_s;
+        };
+    } cp15;
+
+    struct {
+        /* M profile has up to 4 stack pointers:
+         * a Main Stack Pointer and a Process Stack Pointer for each
+         * of the Secure and Non-Secure states. (If the CPU doesn't support
+         * the security extension then it has only two SPs.)
+         * In QEMU we always store the currently active SP in regs[13],
+         * and the non-active SP for the current security state in
+         * v7m.other_sp. The stack pointers for the inactive security state
+         * are stored in other_ss_msp and other_ss_psp.
+         * switch_v7m_security_state() is responsible for rearranging them
+         * when we change security state.
+         */
+        uint32_t control[M_REG_NUM_BANKS];
+        unsigned mpu_ctrl[M_REG_NUM_BANKS]; /* MPU_CTRL */
+        int exception;
+        uint32_t secure; /* Is CPU in Secure state? (not guest visible) */
+    } v7m;
+
+    /* Fields after this point are preserved across CPU reset. */
+
+    /* Internal CPU feature flags.  */
+    uint64_t features;
+
+    /* PMSAv7 MPU */
+    struct {
+        uint32_t *drbar;
+        uint32_t *drsr;
+        uint32_t *dracr;
+    } pmsav7;
+
+    /* PMSAv8 MPU */
+    struct {
+        /* The PMSAv8 implementation also shares some PMSAv7 config
+         * and state:
+         *  pmsav7.rnr (region number register)
+         *  pmsav7_dregion (number of configured regions)
+         */
+        uint32_t *rbar[M_REG_NUM_BANKS];
+        uint32_t *rlar[M_REG_NUM_BANKS];
+    } pmsav8;
+
+    /* v8M SAU */
+    struct {
+        uint32_t *rbar;
+        uint32_t *rlar;
+        uint32_t ctrl;
+    } sau;
+} AFLArmState;
+typedef AFLArmState AFLArchState;
+#endif
+
 /**
  * ARMCPU:
  * @env: #CPUARMState
@@ -1030,6 +1197,10 @@ struct ARMCPU {
 
     /* Generic timer counter frequency, in Hz */
     uint64_t gt_cntfrq_hz;
+
+#ifdef CONFIG_AFL_SYSTEM_FUZZING
+    AFLArmState saved_state;
+#endif  
 };
 
 unsigned int gt_cntfrq_period_ns(ARMCPU *cpu);
