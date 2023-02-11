@@ -570,6 +570,35 @@ void pause_all_vcpus(void)
     qemu_mutex_lock_iothread();
 }
 
+void afl_pause_all_vcpus(void)
+{
+    CPUState *cpu;
+
+    qemu_clock_enable(QEMU_CLOCK_VIRTUAL, false);
+    CPU_FOREACH(cpu) {
+        if (qemu_cpu_is_self(cpu)) {
+            qemu_cpu_stop(cpu, true);
+        } else {
+            cpu->stop = true;
+            qemu_cpu_kick(cpu);
+        }
+    }
+
+    /* We need to drop the replay_lock so any vCPU threads woken up
+     * can finish their replay tasks
+     */
+    replay_mutex_unlock();
+
+    while (!all_vcpus_paused()) {
+        qemu_cond_wait(&qemu_pause_cond, &qemu_global_mutex);
+        CPU_FOREACH(cpu) {
+            qemu_cpu_kick(cpu);
+        }
+    }
+
+    replay_mutex_lock();
+}
+
 void cpu_resume(CPUState *cpu)
 {
     cpu->stop = false;
@@ -627,6 +656,13 @@ static void afl_qemu_on_pipe_notified(void *ctx) {
         return;
     }
 
+    if (mttcg_enabled) {
+        CPU_FOREACH(cpu) {
+            qemu_thread_join(cpu->thread);
+        }    
+    } else {
+        qemu_thread_join(first_cpu->thread);
+    }
     // now all vCPUs have exited
     // stop ticks
     cpu_disable_ticks();

@@ -300,7 +300,7 @@ static void *rr_cpu_thread_fn(void *arg)
         // save tcg context
         restart_tcg_ctx[0] = tcg_ctx;
         // stop all vcpu
-        pause_all_vcpus();
+        afl_pause_all_vcpus();
         // release BQL
         qemu_mutex_unlock_iothread();
     }
