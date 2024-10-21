@@ -612,6 +612,9 @@ static void stm32f7_rcc_write(void *opaque, hwaddr offset, uint64_t value, unsig
 			t->BDCR = value;
 			break;
 		case A_CSR:
+			if (value & R_CSR_LSION_MASK) {
+				value |= R_CSR_LSIRDY_MASK;
+			}
 			t->CSR = value;
 			break;
 		case A_SSCGR:
