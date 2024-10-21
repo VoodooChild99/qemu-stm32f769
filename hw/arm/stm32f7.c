@@ -359,6 +359,17 @@ static void stm32f769nidiscovery_custome_periph_init(MachineState *machine) {
     );
     sysbus_mmio_map(SYS_BUS_DEVICE(tim3), 0, STM32F769NIDISCOVERY_TIM3_BASE);
 
+    /* TIM6 */
+    STM32F7TIM3 *tim6 = g_new(STM32F7TIM3, 1);
+    object_initialize_child(OBJECT(sms), "TIM6", tim6, TYPE_STM32F7_TIM3);
+    sysbus_realize(SYS_BUS_DEVICE(tim6), &error_fatal);
+    sysbus_connect_irq(
+        SYS_BUS_DEVICE(tim6),
+        0,
+        qdev_get_gpio_in(DEVICE(&(sms->armv7m)), 54)
+    );
+    sysbus_mmio_map(SYS_BUS_DEVICE(tim6), 0, 0x40001000);
+
     /* FMC */
     STM32F7FMC *fmc = g_new(STM32F7FMC, 1);
     object_initialize_child(OBJECT(sms), "FMC", fmc, TYPE_STM32F7_FMC);
