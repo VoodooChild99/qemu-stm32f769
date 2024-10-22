@@ -565,3 +565,5 @@ config STM32F7
     select STM32F7_RNG
     select STM32F7_ETH
     select STM32F7_SYSCFG
+    select STM32F7_EXTI
+

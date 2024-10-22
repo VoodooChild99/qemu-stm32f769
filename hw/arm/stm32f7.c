@@ -29,6 +29,7 @@
 #include "hw/misc/stm32f7-rcc.h"
 #include "hw/misc/stm32f7-flash.h"
 #include "hw/misc/stm32f7-pwr.h"
+#include "hw/misc/stm32f7-exti.h"
 #include "hw/gpio/stm32f7-gpioa.h"
 #include "hw/gpio/stm32f7-gpiod.h"
 #include "hw/char/stm32f7-usart.h"
@@ -409,6 +410,20 @@ static void stm32f769nidiscovery_custome_periph_init(MachineState *machine) {
     object_initialize_child(OBJECT(sms), "SYSCFG", syscfg, TYPE_STM32F7_SYSCFG);
     sysbus_realize(SYS_BUS_DEVICE(syscfg), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(syscfg), 0, STM32F769NIDISCOVERY_SYSCFG_BASE);
+
+    /* EXTI */
+    STM32F7EXTI *exti = g_new(STM32F7EXTI, 1);
+    object_initialize_child(OBJECT(sms), "EXTI", exti, TYPE_STM32F7_EXTI);
+    sysbus_realize(SYS_BUS_DEVICE(exti), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(exti), 0, 0x40013C00);
+    const int exti_irqs[] = {2, 6, 7, 8, 9, 10, 23, 40, 1};
+    for (int i = 0; i < sizeof(exti_irqs) / sizeof(*exti_irqs); ++i) {
+        sysbus_connect_irq(
+            SYS_BUS_DEVICE(exti),
+            i,
+            qdev_get_gpio_in(DEVICE(&(sms->armv7m)), exti_irqs[i])
+        );
+    }
 }
 
 static void stm32f7_common_init(MachineState *machine) {
