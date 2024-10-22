@@ -373,6 +373,35 @@ static void stm32f769nidiscovery_custome_periph_init(MachineState *machine) {
     );
     sysbus_mmio_map(SYS_BUS_DEVICE(tim6), 0, 0x40001000);
 
+    /* TIM1 */
+    STM32F7TIM3 *tim1 = g_new(STM32F7TIM3, 1);
+    object_initialize_child(OBJECT(sms), "TIM1", tim1, TYPE_STM32F7_TIM3);
+    sysbus_realize(SYS_BUS_DEVICE(tim1), &error_fatal);
+    sysbus_connect_irq(
+        SYS_BUS_DEVICE(tim1),
+        0,
+        qdev_get_gpio_in(DEVICE(&(sms->armv7m)), 24)
+    );
+    sysbus_mmio_map(SYS_BUS_DEVICE(tim1), 0, 0x40010000);
+
+    /* TIM10 */
+    STM32F7TIM3 *tim10 = g_new(STM32F7TIM3, 1);
+    object_initialize_child(OBJECT(sms), "TIM10", tim10, TYPE_STM32F7_TIM3);
+    sysbus_realize(SYS_BUS_DEVICE(tim10), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(tim10), 0, 0x40014400);
+
+    /* TIM11 */
+    STM32F7TIM3 *tim11 = g_new(STM32F7TIM3, 1);
+    object_initialize_child(OBJECT(sms), "TIM11", tim11, TYPE_STM32F7_TIM3);
+    sysbus_realize(SYS_BUS_DEVICE(tim11), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(tim11), 0, 0x40014800);
+
+    /* TIM12 */
+    STM32F7TIM3 *tim12 = g_new(STM32F7TIM3, 1);
+    object_initialize_child(OBJECT(sms), "TIM12", tim12, TYPE_STM32F7_TIM3);
+    sysbus_realize(SYS_BUS_DEVICE(tim12), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(tim12), 0, 0x40001800);
+
     /* FMC */
     STM32F7FMC *fmc = g_new(STM32F7FMC, 1);
     object_initialize_child(OBJECT(sms), "FMC", fmc, TYPE_STM32F7_FMC);
