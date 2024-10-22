@@ -30,6 +30,8 @@
 #include "hw/misc/stm32f7-flash.h"
 #include "hw/misc/stm32f7-pwr.h"
 #include "hw/misc/stm32f7-exti.h"
+#include "hw/misc/stm32f7-adc.h"
+#include "hw/misc/stm32f7-adc_common.h"
 #include "hw/gpio/stm32f7-gpioa.h"
 #include "hw/gpio/stm32f7-gpiod.h"
 #include "hw/char/stm32f7-usart.h"
@@ -424,6 +426,27 @@ static void stm32f769nidiscovery_custome_periph_init(MachineState *machine) {
             qdev_get_gpio_in(DEVICE(&(sms->armv7m)), exti_irqs[i])
         );
     }
+
+    STM32F7ADC *p0 = g_new(STM32F7ADC, 1);
+	object_initialize_child(OBJECT(sms), "ADC1", p0, TYPE_STM32F7_ADC);
+	sysbus_realize(SYS_BUS_DEVICE(p0), &error_fatal);
+	sysbus_connect_irq(SYS_BUS_DEVICE(p0), 0, qdev_get_gpio_in(DEVICE(&(sms->armv7m)), 18));
+	sysbus_mmio_map(SYS_BUS_DEVICE(p0), 0, 0x40012000);
+
+	STM32F7ADC *p1 = g_new(STM32F7ADC, 1);
+	object_initialize_child(OBJECT(sms), "ADC2", p1, TYPE_STM32F7_ADC);
+	sysbus_realize(SYS_BUS_DEVICE(p1), &error_fatal);
+	sysbus_mmio_map(SYS_BUS_DEVICE(p1), 0, 0x40012100);
+
+	STM32F7ADC *p2 = g_new(STM32F7ADC, 1);
+	object_initialize_child(OBJECT(sms), "ADC3", p2, TYPE_STM32F7_ADC);
+	sysbus_realize(SYS_BUS_DEVICE(p2), &error_fatal);
+	sysbus_mmio_map(SYS_BUS_DEVICE(p2), 0, 0x40012200);
+
+	STM32F7ADC_COMMON *p3 = g_new(STM32F7ADC_COMMON, 1);
+	object_initialize_child(OBJECT(sms), "ADC_Common", p3, TYPE_STM32F7_ADC_COMMON);
+	sysbus_realize(SYS_BUS_DEVICE(p3), &error_fatal);
+	sysbus_mmio_map(SYS_BUS_DEVICE(p3), 0, 0x40012300);
 }
 
 static void stm32f7_common_init(MachineState *machine) {

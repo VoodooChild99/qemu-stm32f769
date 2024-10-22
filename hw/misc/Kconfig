@@ -192,4 +192,10 @@ config STM32F7_SYSCFG
 config STM32F7_EXTI
     bool
 
+config STM32F7_ADC
+    bool
+
+config STM32F7_ADC_COMMON
+    bool
+
 source macio/Kconfig

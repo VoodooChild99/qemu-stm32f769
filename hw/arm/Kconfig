@@ -566,4 +566,6 @@ config STM32F7
     select STM32F7_ETH
     select STM32F7_SYSCFG
     select STM32F7_EXTI
+    select STM32F7_ADC
+    select STM32F7_ADC_COMMON
 
